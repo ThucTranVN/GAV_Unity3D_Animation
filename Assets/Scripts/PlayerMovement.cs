@@ -6,16 +6,35 @@ using UnityEngine;
 [RequireComponent(typeof(CharacterController))]
 public class PlayerMovement : MonoBehaviour
 {
-    public float moveSpeed;
-    public float rotationSpeed;
-    public float jumpSpeed;
-    public float jumpPeriod;
+    [SerializeField]
+    private float moveSpeed = 1f;
+
+    [SerializeField]
+    private float rotationSpeed;
+
+    [SerializeField]
+    private float jumpHeight;
+
+    [SerializeField]
+    private float gravityModifier;
+
+    [SerializeField]
+    private float jumpPeriod;
+
+    [SerializeField]
+    private float jumpHorizontalSpeed;
+
+    [SerializeField]
+    private Transform cameraTransform;
 
     private CharacterController characterController;
     private Animator animator;
     private float ySpeed;
     private float? lastGroundedTime; //? = CheckNull
     private float? jumpPressdTime;
+    private bool isJumping;
+    private bool isGrounded;
+
 
     void Start()
     {
@@ -37,10 +56,17 @@ public class PlayerMovement : MonoBehaviour
             inputMagnitude /= 2;
         }
         animator.SetFloat("Input", inputMagnitude, 0.05f, Time.deltaTime);
-
+        moveDirection = Quaternion.AngleAxis(cameraTransform.transform.eulerAngles.y, Vector3.up) * moveDirection;
         moveDirection.Normalize();
 
-        ySpeed += Physics.gravity.y * Time.deltaTime;
+        float gravity = Physics.gravity.y * gravityModifier;
+
+        if(isJumping && ySpeed > 0 && Input.GetButton("Jump") == false)
+        {
+            gravity *= 2;
+        }
+
+        ySpeed += gravity * Time.deltaTime;
 
         if (characterController.isGrounded)
         {
@@ -55,11 +81,29 @@ public class PlayerMovement : MonoBehaviour
         if(Time.time - lastGroundedTime <= jumpPeriod)
         {
             ySpeed = -0.5f;
-            if(Time.time - jumpPressdTime <= jumpPeriod)
+            animator.SetBool("IsGrounded", true);
+            isGrounded = true;
+            animator.SetBool("IsJumping", false);
+            isJumping = false;
+            animator.SetBool("IsFalling", false);
+
+            if (Time.time - jumpPressdTime <= jumpPeriod)
             {
-                ySpeed = jumpSpeed;
+                ySpeed = Mathf.Sqrt(jumpHeight * -3 * gravity);
+                animator.SetBool("IsJumping", true);
+                isJumping = true;
                 jumpPressdTime = null;
                 lastGroundedTime = null;
+            }
+        }
+        else
+        {
+            animator.SetBool("IsGrounded", false);
+            isGrounded = false;
+
+            if ((isJumping && ySpeed < 0) || ySpeed < -2)
+            {
+                animator.SetBool("IsFalling", true);
             }
         }
 
@@ -74,6 +118,14 @@ public class PlayerMovement : MonoBehaviour
         {
             animator.SetBool("IsMoving", false);
         }
+
+        if (isGrounded == false)
+        {
+            Vector3 velocity = moveDirection * inputMagnitude * jumpHorizontalSpeed;
+            velocity.y = ySpeed;
+
+            characterController.Move(velocity * Time.deltaTime);
+        }
     }
 
     private void OnAnimatorMove()
@@ -82,5 +134,17 @@ public class PlayerMovement : MonoBehaviour
         Vector3 velocity = animator.deltaPosition;
         velocity.y = ySpeed * Time.deltaTime;
         characterController.Move(velocity);
+    }
+
+    private void OnApplicationFocus(bool focus)
+    {
+        if (focus)
+        {
+            Cursor.lockState = CursorLockMode.Locked;
+        }
+        else
+        {
+            Cursor.lockState = CursorLockMode.None;
+        }
     }
 }
